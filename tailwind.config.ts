@@ -3,6 +3,12 @@ import type { Config } from "tailwindcss";
 export default {
   darkMode: ["class"],
   content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
+  safelist: [
+    ...["indigo","violet","purple","pink","rose","orange","amber","emerald","teal","cyan","blue"].flatMap(c => [
+      `bg-${c}-100`, `bg-${c}-500`, `text-${c}-50`, `text-${c}-700`, `ring-${c}-500`,
+      `from-${c}-500`, `to-${c}-600`, `border-${c}-200`,
+    ]),
+  ],
   prefix: "",
   theme: {
     container: {
