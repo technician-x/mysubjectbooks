@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,20 +8,26 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { GraduationCap, Plus, Upload, Trash2, Edit, LogOut, Link2, Loader2, ExternalLink } from "lucide-react";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  GraduationCap, BookOpen, UploadCloud, Settings as SettingsIcon, LogOut,
+  FileText, Trash2, Edit, Loader2, CheckCircle2, Copy, Plus, ChevronUp, ChevronDown
+} from "lucide-react";
 import { toast } from "sonner";
 import { colorOptions, getColor } from "@/lib/colorMap";
 
 const EMOJI_OPTIONS = ["📚","📖","📕","📗","📘","📙","🧪","🔬","🧮","🌍","🎨","🎵","💻","⚛️","📐","🧠","✏️","🔭","🌱","⚙️"];
 
+type Tab = "content" | "upload" | "settings";
+
 export default function Admin() {
   const { user, isTeacher, loading, signOut } = useAuth();
   const navigate = useNavigate();
+  const [tab, setTab] = useState<Tab>("content");
+
   const [subjects, setSubjects] = useState<any[]>([]);
-  const [books, setBooks] = useState<any[]>([]);
   const [resources, setResources] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
 
@@ -30,13 +36,12 @@ export default function Admin() {
   }, [user, isTeacher, loading, navigate]);
 
   const refresh = async () => {
-    const [{ data: s }, { data: b }, { data: r }, { data: ts }] = await Promise.all([
+    const [{ data: s }, { data: r }, { data: ts }] = await Promise.all([
       supabase.from("subjects").select("*").order("order_index"),
-      supabase.from("books").select("*").order("order_index"),
       supabase.from("resources").select("*").order("order_index"),
       supabase.from("teacher_settings").select("*").limit(1).maybeSingle(),
     ]);
-    setSubjects(s ?? []); setBooks(b ?? []); setResources(r ?? []); setSettings(ts);
+    setSubjects(s ?? []); setResources(r ?? []); setSettings(ts);
   };
 
   useEffect(() => { if (isTeacher) refresh(); }, [isTeacher]);
@@ -45,220 +50,116 @@ export default function Admin() {
     return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin" /></div>;
   }
 
+  const navItems: { id: Tab; label: string; icon: any }[] = [
+    { id: "content", label: "My Content", icon: BookOpen },
+    { id: "upload", label: "Upload", icon: UploadCloud },
+    { id: "settings", label: "Settings", icon: SettingsIcon },
+  ];
+
   return (
-    <div className="min-h-screen bg-muted/30">
-      <header className="bg-card border-b sticky top-0 z-30">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+    <div className="min-h-screen bg-background flex animate-fade-in-fast">
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card sticky top-0 h-screen">
+        <Link to="/" className="flex items-center gap-2 px-5 h-16 border-b border-border">
+          <div className="w-9 h-9 rounded-card bg-gradient-primary flex items-center justify-center">
+            <GraduationCap className="w-5 h-5 text-primary-foreground" />
+          </div>
+          <span className="font-heading font-bold text-foreground">{settings?.site_name || "EduShelf"}</span>
+        </Link>
+        <nav className="flex-1 p-3 space-y-1">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setTab(item.id)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-button text-sm font-medium transition-smooth press ${
+                tab === item.id ? "bg-primary-soft text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+            >
+              <item.icon className="w-5 h-5" />
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <div className="p-3 border-t border-border">
+          <button
+            onClick={() => signOut().then(() => navigate("/"))}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-button text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-smooth press"
+          >
+            <LogOut className="w-5 h-5" /> Sign Out
+          </button>
+        </div>
+      </aside>
+
+      {/* Main */}
+      <div className="flex-1 flex flex-col min-w-0 pb-20 md:pb-0">
+        {/* Mobile header */}
+        <header className="md:hidden sticky top-0 z-20 bg-background/85 backdrop-blur border-b border-border h-16 flex items-center justify-between px-4">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-gradient-primary flex items-center justify-center">
+            <div className="w-9 h-9 rounded-card bg-gradient-primary flex items-center justify-center">
               <GraduationCap className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="font-bold text-gradient">{settings?.site_name || "EduShelf"}</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-accent text-accent-foreground">Admin</span>
+            <span className="font-heading font-bold">{settings?.site_name || "EduShelf"}</span>
           </Link>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/" target="_blank"><ExternalLink className="w-4 h-4 mr-1" /> View Site</Link>
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => signOut().then(() => navigate("/"))}>
-              <LogOut className="w-4 h-4 mr-1" /> Sign Out
-            </Button>
-          </div>
-        </div>
-      </header>
+          <button onClick={() => signOut().then(() => navigate("/"))} className="w-11 h-11 rounded-full hover:bg-muted flex items-center justify-center">
+            <LogOut className="w-5 h-5" />
+          </button>
+        </header>
 
-      <main className="container mx-auto px-4 py-8">
-        <Tabs defaultValue="upload">
-          <TabsList className="mb-6">
-            <TabsTrigger value="upload">Upload</TabsTrigger>
-            <TabsTrigger value="content">Content</TabsTrigger>
-            <TabsTrigger value="subjects">Subjects</TabsTrigger>
-            <TabsTrigger value="books">Books</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-          </TabsList>
+        <main className="flex-1 container mx-auto px-4 md:px-8 py-8 max-w-5xl w-full">
+          {tab === "content" && <ContentTab subjects={subjects} resources={resources} settings={settings} onChange={refresh} />}
+          {tab === "upload" && <UploadTab subjects={subjects} onDone={refresh} />}
+          {tab === "settings" && <SettingsTab settings={settings} onChange={refresh} />}
+        </main>
 
-          <TabsContent value="upload"><UploadTab subjects={subjects} books={books} onDone={refresh} /></TabsContent>
-          <TabsContent value="content"><ContentTab subjects={subjects} books={books} resources={resources} onChange={refresh} /></TabsContent>
-          <TabsContent value="subjects"><SubjectsTab subjects={subjects} onChange={refresh} /></TabsContent>
-          <TabsContent value="books"><BooksTab subjects={subjects} books={books} onChange={refresh} /></TabsContent>
-          <TabsContent value="settings"><SettingsTab settings={settings} onChange={refresh} /></TabsContent>
-        </Tabs>
-      </main>
+        {/* Mobile bottom tab bar */}
+        <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-card border-t border-border h-16 flex">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setTab(item.id)}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 text-xs font-medium press ${
+                tab === item.id ? "text-primary" : "text-muted-foreground"
+              }`}
+            >
+              <item.icon className="w-5 h-5" />
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </div>
     </div>
   );
 }
 
-/* ---------- Upload Tab ---------- */
-function UploadTab({ subjects, books, onDone }: any) {
-  const [files, setFiles] = useState<File[]>([]);
-  const [items, setItems] = useState<any[]>([]);
-  const [busy, setBusy] = useState(false);
-
-  const onFiles = (fl: FileList | null) => {
-    if (!fl) return;
-    const arr = Array.from(fl);
-    setFiles(arr);
-    setItems(arr.map((f) => ({
-      name: f.name,
-      title: f.name.replace(/\.pdf$/i, ""),
-      subject_id: subjects[0]?.id || "",
-      book_id: "",
-      content_type: "unit",
-      unit_number: "",
-      description: "",
-      cover_emoji: "📄",
-      cover_color: "indigo",
-      allow_download: true,
-    })));
-  };
-
-  const update = (i: number, patch: any) => setItems((s) => s.map((it, idx) => idx === i ? { ...it, ...patch } : it));
-
-  const upload = async () => {
-    if (items.some((i) => !i.subject_id || !i.title)) {
-      toast.error("Each PDF needs a subject and title"); return;
-    }
-    setBusy(true);
-    try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const meta = items[i];
-        const path = `${meta.subject_id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-        const { error: upErr } = await supabase.storage.from("pdfs").upload(path, file, { contentType: "application/pdf" });
-        if (upErr) throw upErr;
-        const { data: { publicUrl } } = supabase.storage.from("pdfs").getPublicUrl(path);
-        const { error: insErr } = await supabase.from("resources").insert({
-          subject_id: meta.subject_id,
-          book_id: meta.book_id || null,
-          title: meta.title,
-          description: meta.description || null,
-          content_type: meta.content_type,
-          unit_number: meta.unit_number || null,
-          pdf_url: publicUrl,
-          pdf_path: path,
-          allow_download: meta.allow_download,
-          cover_emoji: meta.cover_emoji,
-          cover_color: meta.cover_color,
-        });
-        if (insErr) throw insErr;
-      }
-      toast.success(`Uploaded ${files.length} PDF${files.length > 1 ? "s" : ""}!`);
-      setFiles([]); setItems([]); onDone();
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally { setBusy(false); }
-  };
-
-  if (subjects.length === 0) {
-    return (
-      <Card className="p-8 text-center">
-        <p className="text-muted-foreground mb-4">Create a subject first before uploading PDFs.</p>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <Card className="p-6">
-        <Label htmlFor="pdfs" className="block mb-2">Select one or more PDF files</Label>
-        <Input id="pdfs" type="file" accept="application/pdf" multiple onChange={(e) => onFiles(e.target.files)} />
-      </Card>
-
-      {items.map((it, i) => {
-        const subjectBooks = books.filter((b: any) => b.subject_id === it.subject_id);
-        return (
-          <Card key={i} className="p-5 space-y-4">
-            <div className="flex items-center gap-2">
-              <Upload className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm font-medium truncate">{it.name}</span>
-            </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <Label>Title *</Label>
-                <Input value={it.title} onChange={(e) => update(i, { title: e.target.value })} />
-              </div>
-              <div>
-                <Label>Subject *</Label>
-                <Select value={it.subject_id} onValueChange={(v) => update(i, { subject_id: v, book_id: "" })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {subjects.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.icon} {s.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Content Type</Label>
-                <Select value={it.content_type} onValueChange={(v) => update(i, { content_type: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="full">Full Book</SelectItem>
-                    <SelectItem value="unit">Unit</SelectItem>
-                    <SelectItem value="part">Part / Chapter</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Book (optional)</Label>
-                <Select value={it.book_id || "none"} onValueChange={(v) => update(i, { book_id: v === "none" ? "" : v })}>
-                  <SelectTrigger><SelectValue placeholder="Standalone" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">— Standalone —</SelectItem>
-                    {subjectBooks.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.title}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Unit / Part Number</Label>
-                <Input value={it.unit_number} onChange={(e) => update(i, { unit_number: e.target.value })} placeholder="e.g. Unit 2" />
-              </div>
-              <div>
-                <Label>Cover Emoji</Label>
-                <Select value={it.cover_emoji} onValueChange={(v) => update(i, { cover_emoji: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    {EMOJI_OPTIONS.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="md:col-span-2">
-                <Label>Short Description</Label>
-                <Textarea rows={2} value={it.description} onChange={(e) => update(i, { description: e.target.value })} />
-              </div>
-              <div>
-                <Label>Cover Color</Label>
-                <ColorPicker value={it.cover_color} onChange={(v) => update(i, { cover_color: v })} />
-              </div>
-              <div className="flex items-center gap-2 pt-6">
-                <Switch checked={it.allow_download} onCheckedChange={(v) => update(i, { allow_download: v })} />
-                <Label>Allow download</Label>
-              </div>
-            </div>
-          </Card>
-        );
-      })}
-
-      {items.length > 0 && (
-        <Button onClick={upload} disabled={busy} size="lg" className="bg-gradient-primary">
-          {busy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Uploading…</> : <><Upload className="w-4 h-4 mr-2" /> Upload {items.length} PDF{items.length > 1 ? "s" : ""}</>}
-        </Button>
-      )}
-    </div>
-  );
-}
-
-/* ---------- Content Tab ---------- */
-function ContentTab({ subjects, books, resources, onChange }: any) {
+/* ============================================================
+   CONTENT TAB — Dashboard stats + accordion of subjects
+   ============================================================ */
+function ContentTab({ subjects, resources, settings, onChange }: any) {
   const [editing, setEditing] = useState<any>(null);
+
+  const stats = useMemo(() => {
+    const lastUpload = resources.reduce((acc: any, r: any) => {
+      const d = r.created_at ? new Date(r.created_at) : null;
+      if (!d) return acc;
+      if (!acc || d > acc) return d;
+      return acc;
+    }, null as Date | null);
+    return {
+      subjectCount: subjects.length,
+      pdfCount: resources.length,
+      lastUpload: lastUpload ? lastUpload.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—",
+    };
+  }, [subjects, resources]);
 
   const del = async (r: any) => {
     if (!confirm(`Delete "${r.title}"?`)) return;
-    await supabase.storage.from("pdfs").remove([r.pdf_path]);
+    if (r.pdf_path) await supabase.storage.from("pdfs").remove([r.pdf_path]);
     const { error } = await supabase.from("resources").delete().eq("id", r.id);
     if (error) toast.error(error.message); else { toast.success("Deleted"); onChange(); }
   };
 
   const move = async (r: any, dir: -1 | 1) => {
-    const peers = resources.filter((x: any) => x.subject_id === r.subject_id && x.book_id === r.book_id).sort((a:any,b:any)=>a.order_index-b.order_index);
+    const peers = resources.filter((x: any) => x.subject_id === r.subject_id).sort((a: any, b: any) => a.order_index - b.order_index);
     const idx = peers.findIndex((x: any) => x.id === r.id);
     const swap = peers[idx + dir];
     if (!swap) return;
@@ -267,79 +168,401 @@ function ContentTab({ subjects, books, resources, onChange }: any) {
     onChange();
   };
 
-  const copyLink = (r: any) => {
-    navigator.clipboard.writeText(`${window.location.origin}/read/${r.id}`);
-    toast.success("Link copied!");
+  const typeBadge = (t: string) => {
+    const map: Record<string, { label: string; cls: string }> = {
+      full: { label: "Full Book", cls: "bg-primary-soft text-primary" },
+      unit: { label: "Unit", cls: "bg-emerald-100 text-emerald-700" },
+      part: { label: "Chapter", cls: "bg-amber-100 text-amber-700" },
+    };
+    return map[t] ?? { label: t, cls: "bg-muted text-muted-foreground" };
   };
 
   return (
-    <div className="space-y-6">
-      {subjects.map((s: any) => {
-        const items = resources.filter((r: any) => r.subject_id === s.id);
-        if (items.length === 0) return null;
-        return (
-          <Card key={s.id} className="overflow-hidden">
-            <div className={`p-4 ${getColor(s.color).bg} ${getColor(s.color).text} flex items-center justify-between`}>
-              <div className="flex items-center gap-2 font-semibold">
-                <span className="text-2xl">{s.icon}</span> {s.name}
-              </div>
-              <Button size="sm" variant="ghost" className="text-current hover:bg-white/20" onClick={() => copyLink({ id: `subject/${s.id}`.replace("subject/","") })}
-                      onClickCapture={() => { navigator.clipboard.writeText(`${window.location.origin}/subject/${s.id}`); toast.success("Subject link copied"); }}>
-                <Link2 className="w-4 h-4 mr-1" /> Copy subject link
-              </Button>
-            </div>
-            <div className="divide-y">
-              {items.map((r: any) => {
-                const book = books.find((b: any) => b.id === r.book_id);
-                return (
-                  <div key={r.id} className="p-4 flex items-center gap-3 flex-wrap">
-                    <span className="text-2xl">{r.cover_emoji || "📄"}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{r.title}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {r.content_type} {r.unit_number && `• ${r.unit_number}`} {book && `• in ${book.title}`}
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => move(r, -1)}>↑</Button>
-                      <Button size="sm" variant="ghost" onClick={() => move(r, 1)}>↓</Button>
-                      <Button size="sm" variant="ghost" onClick={() => copyLink(r)}><Link2 className="w-4 h-4" /></Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditing(r)}><Edit className="w-4 h-4" /></Button>
-                      <Button size="sm" variant="ghost" className="text-destructive" onClick={() => del(r)}><Trash2 className="w-4 h-4" /></Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        );
-      })}
+    <div className="space-y-8">
+      <div>
+        <h1 className="font-heading font-bold text-3xl text-foreground mb-1">Dashboard</h1>
+        <p className="text-muted-foreground text-sm">Manage your subjects and uploaded PDFs.</p>
+      </div>
 
-      {resources.length === 0 && (
-        <Card className="p-12 text-center text-muted-foreground">No content yet. Upload some PDFs!</Card>
-      )}
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3 sm:gap-5">
+        <StatCard label="Subjects" value={stats.subjectCount} icon={BookOpen} />
+        <StatCard label="PDFs" value={stats.pdfCount} icon={FileText} />
+        <StatCard label="Last Upload" value={stats.lastUpload} icon={UploadCloud} small />
+      </div>
+
+      {/* Content list */}
+      <div>
+        <h2 className="font-heading font-bold text-xl text-foreground mb-3">My Content</h2>
+        {subjects.length === 0 ? (
+          <Card className="p-12 text-center border-dashed">
+            <BookOpen className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
+            <p className="text-muted-foreground mb-4">No subjects yet. Upload your first PDF to get started.</p>
+          </Card>
+        ) : (
+          <Accordion type="multiple" defaultValue={subjects.map((s: any) => s.id)} className="space-y-3">
+            {subjects.map((s: any) => {
+              const items = resources.filter((r: any) => r.subject_id === s.id);
+              const color = getColor(s.color);
+              return (
+                <AccordionItem key={s.id} value={s.id} className="border-0">
+                  <Card className="overflow-hidden p-0">
+                    <AccordionTrigger className="hover:no-underline px-5 py-4 [&[data-state=open]]:border-b [&[data-state=open]]:border-border">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className={`w-10 h-10 rounded-input ${color.bg} flex items-center justify-center text-xl flex-shrink-0`}>
+                          {s.icon}
+                        </div>
+                        <div className="text-left flex-1 min-w-0">
+                          <div className="font-heading font-semibold text-foreground truncate">{s.name}</div>
+                          <div className="text-xs text-muted-foreground">{items.length} PDF{items.length === 1 ? "" : "s"}</div>
+                        </div>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      {items.length === 0 ? (
+                        <div className="p-5 text-sm text-muted-foreground text-center">No PDFs in this subject yet.</div>
+                      ) : (
+                        <div className="divide-y divide-border">
+                          {items.map((r: any, i: number) => {
+                            const badge = typeBadge(r.content_type);
+                            return (
+                              <div key={r.id} className="px-5 py-3 flex items-center gap-3 flex-wrap hover:bg-muted/40 transition-smooth">
+                                <span className="text-xl flex-shrink-0">{r.cover_emoji || "📄"}</span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-foreground truncate">{r.title}</div>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${badge.cls}`}>{badge.label}</span>
+                                    {r.unit_number && <span className="text-xs text-muted-foreground">{r.unit_number}</span>}
+                                  </div>
+                                </div>
+                                <div className="flex gap-1">
+                                  <Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => move(r, -1)} disabled={i === 0}><ChevronUp className="w-4 h-4" /></Button>
+                                  <Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => move(r, 1)} disabled={i === items.length - 1}><ChevronDown className="w-4 h-4" /></Button>
+                                  <Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => setEditing(r)} aria-label="Edit"><Edit className="w-4 h-4" /></Button>
+                                  <Button size="icon" variant="ghost" className="h-9 w-9 text-destructive hover:text-destructive" onClick={() => del(r)} aria-label="Delete"><Trash2 className="w-4 h-4" /></Button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </AccordionContent>
+                  </Card>
+                </AccordionItem>
+              );
+            })}
+          </Accordion>
+        )}
+      </div>
 
       {editing && (
-        <EditResourceDialog resource={editing} subjects={subjects} books={books} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); onChange(); }} />
+        <EditResourceDialog
+          resource={editing}
+          subjects={subjects}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); onChange(); }}
+        />
       )}
     </div>
   );
 }
 
-function EditResourceDialog({ resource, subjects, books, onClose, onSaved }: any) {
+function StatCard({ label, value, icon: Icon, small }: { label: string; value: any; icon: any; small?: boolean }) {
+  return (
+    <Card className="p-4 sm:p-5">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-input bg-primary-soft text-primary flex items-center justify-center flex-shrink-0">
+          <Icon className="w-5 h-5" />
+        </div>
+        <div className="min-w-0">
+          <div className="text-xs text-muted-foreground">{label}</div>
+          <div className={`font-heading font-bold text-foreground truncate ${small ? "text-base" : "text-2xl"}`}>{value}</div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* ============================================================
+   UPLOAD TAB — drag & drop + single simple form
+   ============================================================ */
+function UploadTab({ subjects, onDone }: { subjects: any[]; onDone: () => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [success, setSuccess] = useState<{ link: string; title: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [subjectId, setSubjectId] = useState<string>("");
+  const [showNewSubject, setShowNewSubject] = useState(false);
+  const [newSubject, setNewSubject] = useState({ name: "", icon: "📚", color: "indigo" });
+
+  const [title, setTitle] = useState("");
+  const [contentType, setContentType] = useState<"full" | "unit" | "part">("unit");
+  const [unitNumber, setUnitNumber] = useState("");
+  const [description, setDescription] = useState("");
+  const [allowDownload, setAllowDownload] = useState(true);
+
+  const onPickFile = (f: File | null) => {
+    if (!f) return;
+    if (f.type !== "application/pdf") { toast.error("Please select a PDF file"); return; }
+    setFile(f);
+    if (!title) setTitle(f.name.replace(/\.pdf$/i, ""));
+    setSuccess(null);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) onPickFile(f);
+  };
+
+  const createSubject = async () => {
+    if (!newSubject.name.trim()) { toast.error("Subject name required"); return; }
+    const { data, error } = await supabase.from("subjects").insert({
+      name: newSubject.name.trim(), icon: newSubject.icon, color: newSubject.color,
+      order_index: subjects.length,
+    }).select().single();
+    if (error) { toast.error(error.message); return; }
+    toast.success("Subject created");
+    setShowNewSubject(false);
+    setNewSubject({ name: "", icon: "📚", color: "indigo" });
+    setSubjectId(data.id);
+    onDone();
+  };
+
+  const upload = async () => {
+    if (!file) { toast.error("Please select a PDF"); return; }
+    if (!subjectId) { toast.error("Please choose a subject"); return; }
+    if (!title.trim()) { toast.error("Title required"); return; }
+    setBusy(true);
+    try {
+      const path = `${subjectId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const { error: upErr } = await supabase.storage.from("pdfs").upload(path, file, { contentType: "application/pdf" });
+      if (upErr) throw upErr;
+      const { data: { publicUrl } } = supabase.storage.from("pdfs").getPublicUrl(path);
+      const peers = await supabase.from("resources").select("id").eq("subject_id", subjectId);
+      const orderIndex = (peers.data?.length ?? 0);
+      const { data: inserted, error: insErr } = await supabase.from("resources").insert({
+        subject_id: subjectId,
+        title: title.trim(),
+        description: description.trim() || null,
+        content_type: contentType,
+        unit_number: contentType !== "full" ? (unitNumber.trim() || null) : null,
+        pdf_url: publicUrl,
+        pdf_path: path,
+        allow_download: allowDownload,
+        cover_emoji: "📄",
+        cover_color: "indigo",
+        order_index: orderIndex,
+      }).select().single();
+      if (insErr) throw insErr;
+      const link = `${window.location.origin}/read/${inserted.id}`;
+      setSuccess({ link, title: title.trim() });
+      // reset form
+      setFile(null); setTitle(""); setUnitNumber(""); setDescription("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      onDone();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally { setBusy(false); }
+  };
+
+  const copyLink = async () => {
+    if (!success) return;
+    await navigator.clipboard.writeText(success.link);
+    toast.success("Link copied!");
+  };
+
+  return (
+    <div className="space-y-6 max-w-2xl mx-auto">
+      <div>
+        <h1 className="font-heading font-bold text-3xl text-foreground mb-1">Upload PDF</h1>
+        <p className="text-muted-foreground text-sm">Add a new resource for your students.</p>
+      </div>
+
+      {/* Drag & drop zone */}
+      <Card
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        onClick={() => fileInputRef.current?.click()}
+        className={`p-10 text-center cursor-pointer border-2 border-dashed transition-all ${
+          dragOver ? "border-primary bg-primary-soft" : "border-border hover:border-primary/50"
+        }`}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf"
+          className="hidden"
+          onChange={(e) => onPickFile(e.target.files?.[0] ?? null)}
+        />
+        <UploadCloud className={`w-14 h-14 mx-auto mb-4 transition-colors ${dragOver ? "text-primary" : "text-muted-foreground"}`} />
+        <p className="font-heading font-semibold text-foreground mb-1">Drop your PDF here or click to browse</p>
+        <p className="text-sm text-muted-foreground">PDF files only · Max 50 MB</p>
+      </Card>
+
+      {/* File preview */}
+      {file && (
+        <Card className="p-4 flex items-center gap-3 animate-fade-in">
+          <div className="w-10 h-10 rounded-input bg-primary-soft text-primary flex items-center justify-center">
+            <FileText className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-medium truncate">{file.name}</div>
+            <div className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</div>
+          </div>
+          <Button variant="ghost" size="icon" onClick={() => setFile(null)} aria-label="Remove"><Trash2 className="w-4 h-4" /></Button>
+        </Card>
+      )}
+
+      {/* Form */}
+      {file && (
+        <Card className="p-6 space-y-5 animate-fade-in">
+          <div className="space-y-1.5">
+            <Label>Subject</Label>
+            <Select value={subjectId} onValueChange={(v) => v === "__new__" ? setShowNewSubject(true) : setSubjectId(v)}>
+              <SelectTrigger><SelectValue placeholder="Choose a subject" /></SelectTrigger>
+              <SelectContent>
+                {subjects.map((s: any) => (
+                  <SelectItem key={s.id} value={s.id}>{s.icon} {s.name}</SelectItem>
+                ))}
+                <SelectItem value="__new__"><span className="text-primary font-medium">+ New Subject</span></SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="title">Title</Label>
+            <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Algebra Basics" />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Content Type</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {(["full","unit","part"] as const).map((t) => {
+                const labels = { full: "Full Book", unit: "Unit", part: "Chapter / Part" };
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setContentType(t)}
+                    className={`h-12 rounded-button border text-sm font-medium press transition-smooth ${
+                      contentType === t ? "border-primary bg-primary-soft text-primary" : "border-border bg-card text-foreground hover:border-primary/40"
+                    }`}
+                  >
+                    {labels[t]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {contentType !== "full" && (
+            <div className="space-y-1.5 animate-fade-in">
+              <Label htmlFor="unit">Unit / Part Number</Label>
+              <Input id="unit" value={unitNumber} onChange={(e) => setUnitNumber(e.target.value)} placeholder="e.g. Unit 3" />
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="description">Short Description (optional)</Label>
+            <Textarea id="description" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="A short note for students…" />
+          </div>
+
+          <div className="flex items-center justify-between py-2">
+            <Label htmlFor="allow-download" className="cursor-pointer">Allow students to download?</Label>
+            <Switch id="allow-download" checked={allowDownload} onCheckedChange={setAllowDownload} />
+          </div>
+
+          <Button onClick={upload} disabled={busy} size="lg" className="w-full">
+            {busy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Uploading…</> : <>Upload & Publish</>}
+          </Button>
+        </Card>
+      )}
+
+      {/* Success banner */}
+      {success && (
+        <Card className="p-5 bg-success/10 border-success/30 animate-scale-in">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-full bg-success text-success-foreground flex items-center justify-center animate-check-pop">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-heading font-semibold text-foreground">Published!</div>
+              <div className="text-sm text-muted-foreground truncate">"{success.title}" is now live.</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 bg-card rounded-input border border-border p-2">
+            <code className="flex-1 text-xs text-muted-foreground truncate px-2">{success.link}</code>
+            <Button size="sm" onClick={copyLink}><Copy className="w-3.5 h-3.5 mr-1" /> Copy Link</Button>
+          </div>
+        </Card>
+      )}
+
+      {/* New subject dialog */}
+      <Dialog open={showNewSubject} onOpenChange={setShowNewSubject}>
+        <DialogContent>
+          <DialogHeader><DialogTitle className="font-heading">New Subject</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Name</Label>
+              <Input value={newSubject.name} onChange={(e) => setNewSubject({ ...newSubject, name: e.target.value })} placeholder="e.g. Mathematics" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Icon</Label>
+              <div className="flex flex-wrap gap-2">
+                {EMOJI_OPTIONS.map((e) => (
+                  <button
+                    key={e}
+                    type="button"
+                    onClick={() => setNewSubject({ ...newSubject, icon: e })}
+                    className={`w-10 h-10 rounded-input text-xl press transition-smooth ${newSubject.icon === e ? "bg-primary-soft ring-2 ring-primary" : "bg-muted hover:bg-muted/70"}`}
+                  >{e}</button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Color</Label>
+              <div className="flex flex-wrap gap-2">
+                {colorOptions.map((c) => (
+                  <button
+                    key={c.name}
+                    type="button"
+                    onClick={() => setNewSubject({ ...newSubject, color: c.name })}
+                    className={`w-9 h-9 rounded-full ${c.bg} press transition-smooth ${newSubject.color === c.name ? "ring-2 ring-offset-2 ring-foreground scale-110" : ""}`}
+                    aria-label={c.name}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowNewSubject(false)}>Cancel</Button>
+            <Button onClick={createSubject}><Plus className="w-4 h-4 mr-1" /> Create</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+/* ============================================================
+   EDIT RESOURCE DIALOG
+   ============================================================ */
+function EditResourceDialog({ resource, subjects, onClose, onSaved }: any) {
   const [form, setForm] = useState({ ...resource });
-  const subjectBooks = books.filter((b: any) => b.subject_id === form.subject_id);
 
   const save = async () => {
     const { error } = await supabase.from("resources").update({
       title: form.title,
-      description: form.description,
+      description: form.description || null,
       subject_id: form.subject_id,
-      book_id: form.book_id || null,
       content_type: form.content_type,
-      unit_number: form.unit_number,
-      cover_emoji: form.cover_emoji,
-      cover_color: form.cover_color,
+      unit_number: form.unit_number || null,
+      cover_emoji: form.cover_emoji || "📄",
       allow_download: form.allow_download,
     }).eq("id", form.id);
     if (error) toast.error(error.message); else { toast.success("Saved"); onSaved(); }
@@ -347,215 +570,125 @@ function EditResourceDialog({ resource, subjects, books, onClose, onSaved }: any
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader><DialogTitle>Edit Resource</DialogTitle></DialogHeader>
-        <div className="grid md:grid-cols-2 gap-4">
-          <div><Label>Title</Label><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
-          <div>
-            <Label>Subject</Label>
-            <Select value={form.subject_id} onValueChange={(v) => setForm({ ...form, subject_id: v, book_id: "" })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{subjects.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.icon} {s.name}</SelectItem>)}</SelectContent>
-            </Select>
+      <DialogContent>
+        <DialogHeader><DialogTitle className="font-heading">Edit Resource</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Title</Label>
+            <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
           </div>
-          <div>
-            <Label>Book</Label>
-            <Select value={form.book_id || "none"} onValueChange={(v) => setForm({ ...form, book_id: v === "none" ? null : v })}>
+          <div className="space-y-1.5">
+            <Label>Subject</Label>
+            <Select value={form.subject_id} onValueChange={(v) => setForm({ ...form, subject_id: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">— Standalone —</SelectItem>
-                {subjectBooks.map((b: any) => <SelectItem key={b.id} value={b.id}>{b.title}</SelectItem>)}
+                {subjects.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.icon} {s.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
-          <div>
+          <div className="space-y-1.5">
             <Label>Content Type</Label>
             <Select value={form.content_type} onValueChange={(v) => setForm({ ...form, content_type: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="full">Full Book</SelectItem>
                 <SelectItem value="unit">Unit</SelectItem>
-                <SelectItem value="part">Part / Chapter</SelectItem>
+                <SelectItem value="part">Chapter / Part</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div><Label>Unit Number</Label><Input value={form.unit_number || ""} onChange={(e) => setForm({ ...form, unit_number: e.target.value })} /></div>
-          <div>
-            <Label>Cover Emoji</Label>
-            <Select value={form.cover_emoji || "📄"} onValueChange={(v) => setForm({ ...form, cover_emoji: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent className="max-h-60">{EMOJI_OPTIONS.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
-            </Select>
+          {form.content_type !== "full" && (
+            <div className="space-y-1.5">
+              <Label>Unit / Part Number</Label>
+              <Input value={form.unit_number || ""} onChange={(e) => setForm({ ...form, unit_number: e.target.value })} />
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label>Description</Label>
+            <Textarea rows={2} value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </div>
-          <div className="md:col-span-2"><Label>Description</Label><Textarea value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
-          <div><Label>Cover Color</Label><ColorPicker value={form.cover_color || "indigo"} onChange={(v) => setForm({ ...form, cover_color: v })} /></div>
-          <div className="flex items-center gap-2 pt-6"><Switch checked={form.allow_download} onCheckedChange={(v) => setForm({ ...form, allow_download: v })} /><Label>Allow download</Label></div>
+          <div className="flex items-center justify-between py-1">
+            <Label className="cursor-pointer">Allow download</Label>
+            <Switch checked={form.allow_download} onCheckedChange={(v) => setForm({ ...form, allow_download: v })} />
+          </div>
         </div>
-        <DialogFooter><Button onClick={save} className="bg-gradient-primary">Save</Button></DialogFooter>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={save}>Save Changes</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-/* ---------- Subjects Tab ---------- */
-function SubjectsTab({ subjects, onChange }: any) {
-  const [form, setForm] = useState({ name: "", icon: "📚", color: "indigo" });
-  const [editing, setEditing] = useState<any>(null);
-
-  const create = async () => {
-    if (!form.name) return;
-    const { error } = await supabase.from("subjects").insert({ ...form, order_index: subjects.length });
-    if (error) toast.error(error.message);
-    else { toast.success("Subject created"); setForm({ name: "", icon: "📚", color: "indigo" }); onChange(); }
-  };
-
-  const del = async (id: string) => {
-    if (!confirm("Delete this subject and all its content?")) return;
-    const { error } = await supabase.from("subjects").delete().eq("id", id);
-    if (error) toast.error(error.message); else { toast.success("Deleted"); onChange(); }
-  };
-
-  const saveEdit = async () => {
-    const { error } = await supabase.from("subjects").update({ name: editing.name, icon: editing.icon, color: editing.color }).eq("id", editing.id);
-    if (error) toast.error(error.message); else { toast.success("Saved"); setEditing(null); onChange(); }
-  };
-
-  return (
-    <div className="space-y-4">
-      <Card className="p-5">
-        <h3 className="font-semibold mb-3 flex items-center gap-2"><Plus className="w-4 h-4" /> New Subject</h3>
-        <div className="grid md:grid-cols-4 gap-3">
-          <Input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <Select value={form.icon} onValueChange={(v) => setForm({ ...form, icon: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent className="max-h-60">{EMOJI_OPTIONS.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
-          </Select>
-          <ColorPicker value={form.color} onChange={(v) => setForm({ ...form, color: v })} />
-          <Button onClick={create} className="bg-gradient-primary">Create</Button>
-        </div>
-      </Card>
-
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {subjects.map((s: any) => (
-          <Card key={s.id} className="p-4 flex items-center gap-3">
-            <div className={`w-12 h-12 rounded-xl ${getColor(s.color).bg} ${getColor(s.color).text} flex items-center justify-center text-2xl`}>{s.icon}</div>
-            <div className="flex-1 min-w-0"><div className="font-medium truncate">{s.name}</div></div>
-            <Button size="sm" variant="ghost" onClick={() => setEditing({ ...s })}><Edit className="w-4 h-4" /></Button>
-            <Button size="sm" variant="ghost" className="text-destructive" onClick={() => del(s.id)}><Trash2 className="w-4 h-4" /></Button>
-          </Card>
-        ))}
-      </div>
-
-      {editing && (
-        <Dialog open onOpenChange={() => setEditing(null)}>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Edit Subject</DialogTitle></DialogHeader>
-            <div className="space-y-3">
-              <div><Label>Name</Label><Input value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></div>
-              <div>
-                <Label>Icon</Label>
-                <Select value={editing.icon} onValueChange={(v) => setEditing({ ...editing, icon: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent className="max-h-60">{EMOJI_OPTIONS.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div><Label>Color</Label><ColorPicker value={editing.color} onChange={(v) => setEditing({ ...editing, color: v })} /></div>
-            </div>
-            <DialogFooter><Button onClick={saveEdit} className="bg-gradient-primary">Save</Button></DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-    </div>
-  );
-}
-
-/* ---------- Books Tab ---------- */
-function BooksTab({ subjects, books, onChange }: any) {
-  const [form, setForm] = useState({ subject_id: "", title: "", description: "" });
-
-  const create = async () => {
-    if (!form.subject_id || !form.title) { toast.error("Subject and title required"); return; }
-    const peers = books.filter((b: any) => b.subject_id === form.subject_id);
-    const { error } = await supabase.from("books").insert({ ...form, order_index: peers.length });
-    if (error) toast.error(error.message); else { toast.success("Book created"); setForm({ subject_id: "", title: "", description: "" }); onChange(); }
-  };
-
-  const del = async (id: string) => {
-    if (!confirm("Delete this book? Resources inside will become standalone.")) return;
-    const { error } = await supabase.from("books").delete().eq("id", id);
-    if (error) toast.error(error.message); else { toast.success("Deleted"); onChange(); }
-  };
-
-  if (subjects.length === 0) {
-    return <Card className="p-8 text-center text-muted-foreground">Create a subject first.</Card>;
-  }
-
-  return (
-    <div className="space-y-4">
-      <Card className="p-5">
-        <h3 className="font-semibold mb-3 flex items-center gap-2"><Plus className="w-4 h-4" /> New Book</h3>
-        <div className="grid md:grid-cols-4 gap-3">
-          <Select value={form.subject_id} onValueChange={(v) => setForm({ ...form, subject_id: v })}>
-            <SelectTrigger><SelectValue placeholder="Subject" /></SelectTrigger>
-            <SelectContent>{subjects.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.icon} {s.name}</SelectItem>)}</SelectContent>
-          </Select>
-          <Input placeholder="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-          <Input placeholder="Description (optional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-          <Button onClick={create} className="bg-gradient-primary">Create</Button>
-        </div>
-      </Card>
-
-      <div className="grid md:grid-cols-2 gap-4">
-        {books.map((b: any) => {
-          const s = subjects.find((x: any) => x.id === b.subject_id);
-          return (
-            <Card key={b.id} className="p-4 flex items-center gap-3">
-              <span className="text-2xl">{s?.icon}</span>
-              <div className="flex-1 min-w-0">
-                <div className="font-medium truncate">{b.title}</div>
-                <div className="text-xs text-muted-foreground">{s?.name}</div>
-              </div>
-              <Button size="sm" variant="ghost" className="text-destructive" onClick={() => del(b.id)}><Trash2 className="w-4 h-4" /></Button>
-            </Card>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ---------- Settings ---------- */
+/* ============================================================
+   SETTINGS TAB
+   ============================================================ */
 function SettingsTab({ settings, onChange }: any) {
-  const [form, setForm] = useState({ site_name: "", tagline: "" });
-  useEffect(() => { if (settings) setForm({ site_name: settings.site_name, tagline: settings.tagline }); }, [settings]);
+  const { user } = useAuth();
+  const [form, setForm] = useState({ site_name: "", tagline: "", teacher_name: "" });
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (settings) setForm({
+      site_name: settings.site_name || "",
+      tagline: settings.tagline || "",
+      teacher_name: settings.teacher_name || "",
+    });
+  }, [settings]);
 
   const save = async () => {
-    const { error } = await supabase.from("teacher_settings").update({ ...form, updated_at: new Date().toISOString() }).eq("id", settings.id);
-    if (error) toast.error(error.message); else { toast.success("Saved"); onChange(); }
+    setBusy(true);
+    try {
+      const { error } = await supabase.from("teacher_settings").update({
+        site_name: form.site_name,
+        tagline: form.tagline,
+        teacher_name: form.teacher_name,
+        updated_at: new Date().toISOString(),
+      }).eq("id", settings.id);
+      if (error) throw error;
+
+      if (password.trim().length >= 6) {
+        const { error: pErr } = await supabase.auth.updateUser({ password });
+        if (pErr) throw pErr;
+        setPassword("");
+      }
+      toast.success("Settings saved");
+      onChange();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally { setBusy(false); }
   };
 
   return (
-    <Card className="p-6 max-w-xl space-y-4">
-      <div><Label>Site Name</Label><Input value={form.site_name} onChange={(e) => setForm({ ...form, site_name: e.target.value })} /></div>
-      <div><Label>Tagline</Label><Input value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} /></div>
-      <Button onClick={save} className="bg-gradient-primary">Save</Button>
-    </Card>
-  );
-}
-
-/* ---------- Color Picker ---------- */
-function ColorPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {colorOptions.map((c) => (
-        <button
-          key={c.name}
-          type="button"
-          onClick={() => onChange(c.name)}
-          className={`w-8 h-8 rounded-full ${c.bg} transition-smooth ${value === c.name ? "ring-2 ring-offset-2 ring-foreground scale-110" : "hover:scale-110"}`}
-          aria-label={c.name}
-        />
-      ))}
+    <div className="max-w-xl mx-auto space-y-6">
+      <div>
+        <h1 className="font-heading font-bold text-3xl text-foreground mb-1">Settings</h1>
+        <p className="text-muted-foreground text-sm">Customize your site and account.</p>
+      </div>
+      <Card className="p-6 space-y-5">
+        <div className="space-y-1.5">
+          <Label>Site Name</Label>
+          <Input value={form.site_name} onChange={(e) => setForm({ ...form, site_name: e.target.value })} placeholder="EduShelf" />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Tagline</Label>
+          <Input value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} placeholder="Learn anywhere, anytime." />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Your Name</Label>
+          <Input value={form.teacher_name} onChange={(e) => setForm({ ...form, teacher_name: e.target.value })} placeholder="Mr. / Ms. ..." />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Change Password</Label>
+          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Leave blank to keep current" minLength={6} />
+          <p className="text-xs text-muted-foreground">Signed in as {user?.email}</p>
+        </div>
+        <Button onClick={save} disabled={busy} size="lg" className="w-full">
+          {busy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving…</> : "Save Changes"}
+        </Button>
+      </Card>
     </div>
   );
 }
