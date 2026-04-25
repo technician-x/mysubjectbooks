@@ -7,7 +7,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { mode, question, pdfText, pageNumber } = await req.json();
+    const { mode, question, pdfText, pageNumber, language } = await req.json();
+    const isHindi = language === "hi";
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
@@ -15,12 +16,14 @@ Deno.serve(async (req) => {
     let userPrompt = "";
 
     if (mode === "explain") {
-      systemPrompt =
-        "You are a friendly teacher explaining content to a school/college student. Use simple, clear language. Keep explanations concise but thorough. Use short paragraphs.";
-      userPrompt = `Explain the following content from page ${pageNumber ?? ""} in simple language a student can understand:\n\n${pdfText}`;
+      systemPrompt = isHindi
+        ? "Explain the following content in simple Hindi (Devanagari script) as if you are a teacher explaining to a student. Use easy language suitable for school or college students. Base your answer only on the provided PDF content."
+        : "You are a friendly teacher explaining content to a school/college student. Use simple, clear language. Keep explanations concise but thorough. Use short paragraphs.";
+      userPrompt = `Explain the following content from page ${pageNumber ?? ""}${isHindi ? " in simple Hindi" : " in simple language a student can understand"}:\n\n${pdfText}`;
     } else {
-      systemPrompt =
-        "You are an AI Study Assistant helping a student understand a PDF document. Answer questions clearly and concisely based on the provided PDF content. If the answer is on a specific page, mention 'Page reference: Page X' at the end. If you don't know, say so honestly.";
+      systemPrompt = isHindi
+        ? "You are an AI Study Assistant helping a student understand a PDF document. The student has asked a question in Hindi. Please answer in clear, simple Hindi (Devanagari script). Use easy language suitable for school or college students. Base your answer only on the provided PDF content. If the answer is on a specific page, mention 'पृष्ठ संदर्भ: पृष्ठ X' at the end. If you don't know, say so honestly."
+        : "You are an AI Study Assistant helping a student understand a PDF document. Answer questions clearly and concisely based on the provided PDF content. If the answer is on a specific page, mention 'Page reference: Page X' at the end. If you don't know, say so honestly.";
       userPrompt = `PDF Content:\n${pdfText}\n\nStudent Question: ${question}`;
     }
 
