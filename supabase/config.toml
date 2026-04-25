@@ -1,0 +1,4 @@
+project_id = "fsaabcpwzhvwysrodxwf"
+
+[functions.pdf-ai]
+verify_jwt = false
