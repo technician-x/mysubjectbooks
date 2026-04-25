@@ -149,6 +149,7 @@ export type Database = {
           site_name: string
           tagline: string
           teacher_email: string | null
+          teacher_name: string | null
           updated_at: string
         }
         Insert: {
@@ -157,6 +158,7 @@ export type Database = {
           site_name?: string
           tagline?: string
           teacher_email?: string | null
+          teacher_name?: string | null
           updated_at?: string
         }
         Update: {
@@ -165,6 +167,7 @@ export type Database = {
           site_name?: string
           tagline?: string
           teacher_email?: string | null
+          teacher_name?: string | null
           updated_at?: string
         }
         Relationships: []
