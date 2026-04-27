@@ -2,7 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Sparkles, X, Send, Mic, MicOff, Volume2, Pause, Play, Square, Loader2, MessageCircle, BookOpen, HelpCircle } from "lucide-react";
+import {
+  Sparkles, X, Send, Mic, MicOff, Volume2, Pause, Play, Square, Loader2,
+  MessageCircle, BookOpen, HelpCircle, Copy, Check, RotateCcw, Bot, User as UserIcon,
+} from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -27,7 +32,6 @@ function sanitizeForSpeech(text: string): string {
     .trim();
 }
 
-// Split long text into natural sentence-sized chunks (helps mobile TTS engines)
 function chunkForSpeech(text: string, max = 180): string[] {
   const clean = sanitizeForSpeech(text);
   if (!clean) return [];
@@ -64,7 +68,9 @@ export default function AIAssistant({
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState("");
@@ -83,7 +89,10 @@ export default function AIAssistant({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading, streamingText]);
 
-  // Warm up voice list (some browsers load asynchronously)
+  useEffect(() => {
+    if (open && tab === "ask") setTimeout(() => inputRef.current?.focus(), 250);
+  }, [open, tab]);
+
   useEffect(() => {
     if (!("speechSynthesis" in window)) return;
     const load = () => {
@@ -95,12 +104,11 @@ export default function AIAssistant({
   }, []);
 
   const hindiVoiceAvailable = useMemo(() => {
-    if (!voicesReady || !("speechSynthesis" in window)) return true; // assume ok before checking
+    if (!voicesReady || !("speechSynthesis" in window)) return true;
     const v = window.speechSynthesis.getVoices();
     return v.some((x) => x.lang?.toLowerCase().startsWith("hi"));
   }, [voicesReady]);
 
-  // Pick the best Hindi voice (Google / Microsoft natural voices preferred)
   const findVoice = (target: Lang): SpeechSynthesisVoice | null => {
     if (!("speechSynthesis" in window)) return null;
     const voices = window.speechSynthesis.getVoices();
@@ -136,7 +144,6 @@ export default function AIAssistant({
     return en[0] || null;
   };
 
-  // Stream from edge function via SSE
   const streamAI = async (
     mode: "ask" | "explain",
     question: string | undefined,
@@ -186,10 +193,7 @@ export default function AIAssistant({
         try {
           const json = JSON.parse(payload);
           const delta = json.choices?.[0]?.delta?.content ?? "";
-          if (delta) {
-            full += delta;
-            onDelta(delta);
-          }
+          if (delta) { full += delta; onDelta(delta); }
         } catch { /* ignore parse errors */ }
       }
     }
@@ -222,7 +226,27 @@ export default function AIAssistant({
     }
   };
 
-  // Queued chunked speech for natural Hindi delivery
+  const regenerate = () => {
+    // resend last user question
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (!lastUser) return;
+    // remove trailing assistant if last
+    setMessages((m) => {
+      const copy = [...m];
+      if (copy.length && copy[copy.length - 1].role === "assistant") copy.pop();
+      return copy;
+    });
+    handleAsk(lastUser.content);
+  };
+
+  const copyMsg = async (text: string, idx: number) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 1500);
+    } catch { toast.error("Copy failed"); }
+  };
+
   const speak = (text: string, speakLang: Lang = lang) => {
     if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
@@ -230,7 +254,7 @@ export default function AIAssistant({
 
     const voice = findVoice(speakLang);
     if (speakLang === "hi" && !voice) {
-      toast.warning("Hindi voice not installed on this device. Install a Hindi TTS voice in your OS settings for best results.");
+      toast.warning("Hindi voice not installed. Please install a Hindi TTS voice in your OS settings.");
       return;
     }
 
@@ -244,9 +268,7 @@ export default function AIAssistant({
       u.rate = speakLang === "hi" ? 0.92 : 1.0;
       u.pitch = 1.0;
       u.volume = 1.0;
-      u.onend = () => {
-        if (i === chunks.length - 1) setSpeakingState("idle");
-      };
+      u.onend = () => { if (i === chunks.length - 1) setSpeakingState("idle"); };
       u.onerror = () => setSpeakingState("idle");
       return u;
     });
@@ -323,17 +345,17 @@ export default function AIAssistant({
 
   useEffect(() => () => { window.speechSynthesis?.cancel(); recogRef.current?.stop?.(); }, []);
 
-  const LangToggle = () => (
-    <div className="flex gap-1 p-1 bg-muted rounded-full mb-4 self-center">
+  const LangToggle = ({ className = "" }: { className?: string }) => (
+    <div className={`inline-flex gap-1 p-1 bg-muted rounded-full ${className}`}>
       <button
         onClick={() => setLang("en")}
-        className={`px-3 py-1.5 text-xs font-medium rounded-full transition-smooth ${lang === "en" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+        className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 ${lang === "en" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
       >
-        🇬🇧 English
+        🇬🇧 EN
       </button>
       <button
         onClick={() => setLang("hi")}
-        className={`px-3 py-1.5 text-xs font-medium rounded-full transition-smooth ${lang === "hi" ? "bg-primary text-primary-foreground shadow-sm font-hindi" : "text-muted-foreground hover:text-foreground font-hindi"}`}
+        className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 font-hindi ${lang === "hi" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
       >
         🇮🇳 हिन्दी
       </button>
@@ -341,10 +363,16 @@ export default function AIAssistant({
   );
 
   const TypingDots = () => (
-    <div className="flex items-center gap-1">
-      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: "0ms" }} />
-      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: "150ms" }} />
-      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-bounce" style={{ animationDelay: "300ms" }} />
+    <div className="flex items-center gap-1 py-1">
+      <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "0ms" }} />
+      <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "150ms" }} />
+      <span className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: "300ms" }} />
+    </div>
+  );
+
+  const Markdown = ({ text, hindi }: { text: string; hindi: boolean }) => (
+    <div className={`prose prose-sm max-w-none prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1.5 prose-li:my-0.5 prose-strong:text-foreground ${hindi ? "font-hindi" : ""}`}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
     </div>
   );
 
@@ -357,98 +385,164 @@ export default function AIAssistant({
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-6 right-6 z-40 w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-primary text-primary-foreground shadow-pop hover:scale-110 active:scale-95 transition-all flex items-center justify-center"
+          className="group fixed bottom-6 right-6 z-40 w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-primary text-primary-foreground shadow-pop hover:scale-110 active:scale-95 transition-all duration-300 flex items-center justify-center"
           aria-label="Open AI Assistant"
         >
-          <Sparkles className="w-6 h-6 sm:w-7 sm:h-7" />
+          <span className="absolute inset-0 rounded-full bg-primary/30 animate-ping opacity-40 group-hover:opacity-70" />
+          <Sparkles className="w-6 h-6 sm:w-7 sm:h-7 relative" />
         </button>
       )}
 
       {open && (
         <>
           <div
-            className="fixed inset-0 z-40 bg-black/30 sm:bg-transparent sm:pointer-events-none animate-fade-in-fast"
+            className="fixed inset-0 z-40 bg-foreground/30 backdrop-blur-sm sm:bg-transparent sm:backdrop-blur-0 sm:pointer-events-none animate-fade-in-fast"
             onClick={() => setOpen(false)}
           />
 
           <div
-            className="fixed z-50 bg-card flex flex-col overflow-hidden shadow-pop
-                       inset-x-0 bottom-0 h-[85vh] rounded-t-2xl animate-slide-in-bottom
-                       sm:inset-y-0 sm:right-0 sm:left-auto sm:top-0 sm:bottom-0 sm:h-full sm:w-[420px] sm:rounded-none sm:rounded-l-2xl sm:animate-slide-in-right"
+            className="fixed z-50 bg-card flex flex-col overflow-hidden shadow-pop border border-border/60
+                       inset-x-0 bottom-0 h-[88vh] rounded-t-2xl animate-slide-in-bottom
+                       sm:inset-y-0 sm:right-0 sm:left-auto sm:top-0 sm:bottom-0 sm:h-full sm:w-[440px] sm:rounded-none sm:rounded-l-2xl sm:animate-slide-in-right"
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-full bg-gradient-primary flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 text-primary-foreground" />
+            {/* Header */}
+            <div className="relative px-5 py-4 border-b border-border/60 bg-gradient-to-br from-primary/8 via-card to-card overflow-hidden">
+              <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-primary/10 blur-2xl pointer-events-none" />
+              <div className="relative flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="relative w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center shrink-0">
+                    <Sparkles className="w-5 h-5 text-primary-foreground" />
+                    <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-success border-2 border-card" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-heading font-semibold text-foreground leading-tight truncate">AI Assistant</h3>
+                    <p className="text-[11px] text-muted-foreground leading-tight">
+                      {lang === "hi" ? <span className="font-hindi">पृष्ठ {currentPage} • ऑनलाइन</span> : <>Page {currentPage} • Online</>}
+                    </p>
+                  </div>
                 </div>
-                <h3 className="font-heading font-semibold text-foreground">AI Assistant</h3>
+                <div className="flex items-center gap-1.5">
+                  <LangToggle />
+                  <button onClick={() => setOpen(false)} className="w-9 h-9 rounded-full hover:bg-muted flex items-center justify-center transition-colors press" aria-label="Close">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-              <button onClick={() => setOpen(false)} className="w-10 h-10 rounded-full hover:bg-muted flex items-center justify-center" aria-label="Close">
-                <X className="w-5 h-5" />
-              </button>
             </div>
 
             <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col min-h-0">
-              <div className="px-4 pt-4">
-                <TabsList className="grid grid-cols-3 w-full">
-                  <TabsTrigger value="ask">Ask</TabsTrigger>
-                  <TabsTrigger value="voice">Voice</TabsTrigger>
-                  <TabsTrigger value="explain">Explain</TabsTrigger>
+              <div className="px-4 pt-3">
+                <TabsList className="grid grid-cols-3 w-full h-10 p-1 bg-muted">
+                  <TabsTrigger value="ask" className="text-xs gap-1.5"><MessageCircle className="w-3.5 h-3.5" /> Ask</TabsTrigger>
+                  <TabsTrigger value="voice" className="text-xs gap-1.5"><Mic className="w-3.5 h-3.5" /> Voice</TabsTrigger>
+                  <TabsTrigger value="explain" className="text-xs gap-1.5"><BookOpen className="w-3.5 h-3.5" /> Explain</TabsTrigger>
                 </TabsList>
               </div>
 
               {/* ASK */}
               <TabsContent value="ask" className="flex-1 flex flex-col min-h-0 m-0 px-4 pb-4 pt-3">
-                <LangToggle />
-                <div className="flex-1 overflow-y-auto space-y-3 mb-3 -mx-1 px-1">
+                <div className="flex-1 overflow-y-auto space-y-4 mb-3 -mx-1 px-1 scroll-smooth">
                   {messages.length === 0 && !loading && (
-                    <div className="flex flex-col items-center justify-center text-center px-6 py-8 mt-4 animate-fade-in-fast">
-                      <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                        <MessageCircle className="w-6 h-6 text-primary" />
+                    <div className="flex flex-col items-center justify-center text-center px-6 py-6 mt-2 animate-fade-in">
+                      <div className="relative w-16 h-16 mb-4">
+                        <div className="absolute inset-0 rounded-full bg-primary/10 animate-ping opacity-50" />
+                        <div className="relative w-16 h-16 rounded-full bg-gradient-primary flex items-center justify-center shadow-card">
+                          <Sparkles className="w-7 h-7 text-primary-foreground" />
+                        </div>
                       </div>
                       <h4 className={`font-heading font-semibold text-foreground mb-1 ${lang === "hi" ? "font-hindi" : ""}`}>
-                        {lang === "hi" ? "नमस्ते! मैं आपकी मदद के लिए तैयार हूँ" : "Hi! How can I help?"}
+                        {lang === "hi" ? "नमस्ते! कैसे मदद करूँ?" : "Hi! How can I help?"}
                       </h4>
                       <p className={`text-sm text-muted-foreground mb-5 ${lang === "hi" ? "font-hindi" : ""}`}>
                         {lang === "hi" ? "इस PDF के बारे में कुछ भी पूछें" : "Ask anything about this PDF"}
                       </p>
                       <div className="flex flex-col gap-2 w-full max-w-xs">
-                        {suggestions.map((s) => (
+                        {suggestions.map((s, i) => (
                           <button
                             key={s}
                             onClick={() => handleAsk(s)}
-                            className={`text-left text-sm px-3 py-2 rounded-xl bg-muted hover:bg-muted/70 transition-smooth ${lang === "hi" ? "font-hindi" : ""}`}
+                            style={{ animationDelay: `${i * 60}ms` }}
+                            className={`group text-left text-sm px-3.5 py-2.5 rounded-xl bg-muted/60 border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all press animate-fade-in flex items-center gap-2 ${lang === "hi" ? "font-hindi" : ""}`}
                           >
-                            <HelpCircle className="w-3.5 h-3.5 inline mr-2 text-primary" />
-                            {s}
+                            <HelpCircle className="w-3.5 h-3.5 text-primary shrink-0 group-hover:scale-110 transition-transform" />
+                            <span className="flex-1">{s}</span>
                           </button>
                         ))}
                       </div>
                     </div>
                   )}
-                  {messages.map((m, i) => (
-                    <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} animate-fade-in-fast`}>
-                      <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
-                        m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
-                      } ${m.lang === "hi" ? "font-hindi" : ""}`}>
-                        <div className="text-[10px] opacity-70 mb-1">
-                          {m.lang === "hi" ? "🇮🇳 हिन्दी" : "🇬🇧 English"}
+
+                  {messages.map((m, i) => {
+                    const isUser = m.role === "user";
+                    const isLastAssistant = !isUser && i === messages.length - 1 && !loading;
+                    return (
+                      <div key={i} className={`flex gap-2 ${isUser ? "justify-end" : "justify-start"} animate-fade-in`}>
+                        {!isUser && (
+                          <div className="w-7 h-7 rounded-full bg-gradient-primary flex items-center justify-center shrink-0 mt-0.5">
+                            <Bot className="w-3.5 h-3.5 text-primary-foreground" />
+                          </div>
+                        )}
+                        <div className={`group max-w-[80%] ${isUser ? "items-end" : "items-start"} flex flex-col gap-1`}>
+                          <div className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                            isUser
+                              ? "bg-gradient-primary text-primary-foreground rounded-br-sm shadow-sm"
+                              : "bg-muted text-foreground rounded-bl-sm"
+                          } ${m.lang === "hi" ? "font-hindi" : ""}`}>
+                            {isUser ? (
+                              <span className="whitespace-pre-wrap">{m.content}</span>
+                            ) : (
+                              <Markdown text={m.content} hindi={m.lang === "hi"} />
+                            )}
+                          </div>
+                          {!isUser && (
+                            <div className="flex items-center gap-1 px-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => copyMsg(m.content, i)}
+                                className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted transition-colors"
+                                title="Copy"
+                              >
+                                {copiedIdx === i ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
+                                {copiedIdx === i ? "Copied" : "Copy"}
+                              </button>
+                              <button
+                                onClick={() => speak(m.content, m.lang)}
+                                className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted transition-colors"
+                                title="Read aloud"
+                              >
+                                <Volume2 className="w-3 h-3" /> Speak
+                              </button>
+                              {isLastAssistant && (
+                                <button
+                                  onClick={regenerate}
+                                  className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted transition-colors"
+                                  title="Regenerate"
+                                >
+                                  <RotateCcw className="w-3 h-3" /> Retry
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        {m.content}
+                        {isUser && (
+                          <div className="w-7 h-7 rounded-full bg-foreground/10 flex items-center justify-center shrink-0 mt-0.5">
+                            <UserIcon className="w-3.5 h-3.5 text-foreground/70" />
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
+
                   {loading && (
-                    <div className="flex justify-start animate-fade-in-fast">
-                      <div className={`max-w-[85%] bg-muted rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap text-foreground ${lang === "hi" ? "font-hindi" : ""}`}>
-                        <div className="text-[10px] opacity-70 mb-1">
-                          {lang === "hi" ? "🇮🇳 हिन्दी" : "🇬🇧 English"}
-                        </div>
+                    <div className="flex gap-2 justify-start animate-fade-in-fast">
+                      <div className="w-7 h-7 rounded-full bg-gradient-primary flex items-center justify-center shrink-0 mt-0.5">
+                        <Bot className="w-3.5 h-3.5 text-primary-foreground" />
+                      </div>
+                      <div className={`max-w-[80%] bg-muted rounded-2xl rounded-bl-sm px-3.5 py-2.5 text-sm text-foreground ${lang === "hi" ? "font-hindi" : ""}`}>
                         {streamingText ? (
-                          <>
-                            {streamingText}
-                            <span className="inline-block w-1.5 h-4 ml-0.5 align-middle bg-primary/70 animate-pulse" />
-                          </>
+                          <div className="flex items-baseline">
+                            <Markdown text={streamingText} hindi={lang === "hi"} />
+                            <span className="inline-block w-1.5 h-3.5 ml-0.5 align-middle bg-primary/70 animate-pulse rounded-sm" />
+                          </div>
                         ) : (
                           <TypingDots />
                         )}
@@ -457,118 +551,197 @@ export default function AIAssistant({
                   )}
                   <div ref={messagesEndRef} />
                 </div>
-                <form onSubmit={(e) => { e.preventDefault(); handleAsk(); }} className="flex gap-2">
-                  <Input
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder={lang === "hi" ? "इस PDF के बारे में पूछें…" : "Ask about this PDF…"}
-                    className={lang === "hi" ? "font-hindi" : ""}
-                    disabled={loading}
-                  />
-                  <Button type="submit" size="icon" disabled={loading || !input.trim()}>
+
+                <form onSubmit={(e) => { e.preventDefault(); handleAsk(); }} className="flex gap-2 items-end">
+                  <div className="flex-1 relative">
+                    <Input
+                      ref={inputRef}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      placeholder={lang === "hi" ? "अपना प्रश्न लिखें…" : "Type your question…"}
+                      className={`pr-10 bg-muted/50 border-border/60 focus-visible:bg-card ${lang === "hi" ? "font-hindi" : ""}`}
+                      disabled={loading}
+                    />
+                    <button
+                      type="button"
+                      onClick={listening ? stopListening : startListening}
+                      disabled={loading}
+                      className={`absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center transition-all press ${listening ? "bg-destructive text-destructive-foreground animate-pulse" : "text-muted-foreground hover:text-primary hover:bg-primary/10"}`}
+                      aria-label="Voice input"
+                    >
+                      {listening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  <Button
+                    type="submit"
+                    size="icon"
+                    disabled={loading || !input.trim()}
+                    className="rounded-full shrink-0 bg-gradient-primary hover:opacity-90 disabled:opacity-40"
+                  >
                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                   </Button>
                 </form>
+                {interim && (
+                  <p className={`text-xs italic text-primary mt-2 px-1 ${lang === "hi" ? "font-hindi" : ""}`}>
+                    🎤 "{interim}"
+                  </p>
+                )}
               </TabsContent>
 
               {/* VOICE */}
-              <TabsContent value="voice" className="flex-1 flex flex-col items-center justify-center m-0 p-6 text-center">
-                <LangToggle />
+              <TabsContent value="voice" className="flex-1 flex flex-col items-center justify-center m-0 p-6 text-center overflow-y-auto">
                 {lang === "hi" && voicesReady && !hindiVoiceAvailable && (
-                  <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4 font-hindi">
+                  <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-4 font-hindi max-w-xs">
                     हिन्दी आवाज़ इस डिवाइस पर उपलब्ध नहीं है। कृपया सेटिंग्स में हिन्दी TTS स्थापित करें।
                   </div>
                 )}
-                <div className={`w-32 h-32 rounded-full bg-gradient-primary flex items-center justify-center mb-6 transition-transform ${listening ? "animate-pulse scale-110" : speakingState === "speaking" ? "animate-pulse" : ""}`}>
-                  {listening ? <MicOff className="w-12 h-12 text-primary-foreground" /> :
-                   speakingState === "speaking" ? <Volume2 className="w-12 h-12 text-primary-foreground" /> :
-                   <Mic className="w-12 h-12 text-primary-foreground" />}
+
+                {/* Voice orb with audio rings */}
+                <div className="relative w-40 h-40 mb-6 flex items-center justify-center">
+                  {(listening || speakingState === "speaking") && (
+                    <>
+                      <span className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
+                      <span className="absolute inset-3 rounded-full bg-primary/30 animate-ping" style={{ animationDelay: "200ms" }} />
+                      <span className="absolute inset-6 rounded-full bg-primary/40 animate-ping" style={{ animationDelay: "400ms" }} />
+                    </>
+                  )}
+                  <button
+                    onClick={listening ? stopListening : (loading ? undefined : startListening)}
+                    disabled={loading}
+                    className={`relative w-32 h-32 rounded-full flex items-center justify-center shadow-pop transition-transform press ${
+                      listening ? "bg-destructive" :
+                      speakingState === "speaking" ? "bg-gradient-primary scale-105" :
+                      "bg-gradient-primary hover:scale-105"
+                    }`}
+                  >
+                    {loading ? <Loader2 className="w-12 h-12 text-primary-foreground animate-spin" /> :
+                     listening ? <MicOff className="w-12 h-12 text-primary-foreground" /> :
+                     speakingState === "speaking" ? <Volume2 className="w-12 h-12 text-primary-foreground" /> :
+                     <Mic className="w-12 h-12 text-primary-foreground" />}
+                  </button>
                 </div>
-                <p className={`text-sm text-muted-foreground mb-2 ${lang === "hi" ? "font-hindi" : ""}`}>
+
+                <p className={`text-base font-medium text-foreground mb-1 ${lang === "hi" ? "font-hindi" : ""}`}>
                   {lang === "hi" ? (
-                    listening ? "सुन रहा हूँ… अब बोलें" :
+                    listening ? "सुन रहा हूँ…" :
                     loading ? "सोच रहा है…" :
-                    speakingState === "speaking" ? "उत्तर बोला जा रहा है" :
-                    "टैप करें और प्रश्न पूछें"
+                    speakingState === "speaking" ? "बोल रहा हूँ" :
+                    "बोलने के लिए टैप करें"
                   ) : (
-                    listening ? "Listening… speak now" :
+                    listening ? "Listening…" :
                     loading ? "Thinking…" :
-                    speakingState === "speaking" ? "Speaking the answer" :
-                    "Tap and ask a question out loud"
+                    speakingState === "speaking" ? "Speaking" :
+                    "Tap to speak"
                   )}
                 </p>
+                <p className={`text-xs text-muted-foreground mb-4 max-w-xs ${lang === "hi" ? "font-hindi" : ""}`}>
+                  {lang === "hi" ? "PDF के बारे में अपना प्रश्न ज़ोर से बोलें" : "Ask your question out loud about the PDF"}
+                </p>
+
                 {interim && (
-                  <p className={`text-xs italic text-primary mb-3 max-w-xs ${lang === "hi" ? "font-hindi" : ""}`}>
+                  <p className={`text-sm italic text-primary mb-3 max-w-xs px-3 py-1.5 bg-primary/5 rounded-full ${lang === "hi" ? "font-hindi" : ""}`}>
                     "{interim}"
                   </p>
                 )}
-                <div className="flex gap-2 mt-2">
-                  {!listening ? (
-                    <Button onClick={startListening} disabled={loading} size="lg">
-                      <Mic className="w-4 h-4 mr-2" />
-                      <span className={lang === "hi" ? "font-hindi" : ""}>
-                        {lang === "hi" ? "बोलें" : "Start Listening"}
-                      </span>
+
+                <div className="flex gap-2 mt-2 flex-wrap justify-center">
+                  {speakingState === "speaking" && (
+                    <Button variant="outline" size="sm" onClick={pauseSpeech} className="rounded-full">
+                      <Pause className="w-4 h-4 mr-1" /> Pause
                     </Button>
-                  ) : (
-                    <Button variant="destructive" onClick={stopListening} size="lg">
-                      <MicOff className="w-4 h-4 mr-2" />
-                      <span className={lang === "hi" ? "font-hindi" : ""}>{lang === "hi" ? "रोकें" : "Stop"}</span>
+                  )}
+                  {speakingState === "paused" && (
+                    <Button variant="outline" size="sm" onClick={resumeSpeech} className="rounded-full">
+                      <Play className="w-4 h-4 mr-1" /> Resume
                     </Button>
                   )}
                   {speakingState !== "idle" && (
-                    <Button variant="outline" size="lg" onClick={stopSpeech}>
-                      <Square className="w-4 h-4" />
+                    <Button variant="outline" size="sm" onClick={stopSpeech} className="rounded-full">
+                      <Square className="w-4 h-4 mr-1" /> Stop
                     </Button>
                   )}
                 </div>
-                {messages.length > 0 && (
-                  <div className={`mt-6 text-left text-sm bg-muted rounded-card p-3 w-full max-h-32 overflow-y-auto ${messages[messages.length - 1].lang === "hi" ? "font-hindi" : ""}`}>
-                    <div className="text-[10px] opacity-70 mb-1">
-                      {messages[messages.length - 1].lang === "hi" ? "🇮🇳 हिन्दी" : "🇬🇧 English"}
+
+                {messages.length > 0 && messages[messages.length - 1].role === "assistant" && (
+                  <div className={`mt-6 text-left text-sm bg-muted rounded-2xl p-4 w-full max-h-40 overflow-y-auto border border-border/50 ${messages[messages.length - 1].lang === "hi" ? "font-hindi" : ""}`}>
+                    <div className="flex items-center justify-between mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <span>{messages[messages.length - 1].lang === "hi" ? "🇮🇳 उत्तर" : "🇬🇧 Answer"}</span>
+                      <button
+                        onClick={() => speak(messages[messages.length - 1].content, messages[messages.length - 1].lang)}
+                        className="text-primary hover:text-primary/80 flex items-center gap-1"
+                      >
+                        <Volume2 className="w-3 h-3" /> Replay
+                      </button>
                     </div>
-                    {messages[messages.length - 1].content}
+                    <Markdown text={messages[messages.length - 1].content} hindi={messages[messages.length - 1].lang === "hi"} />
                   </div>
                 )}
               </TabsContent>
 
               {/* EXPLAIN */}
               <TabsContent value="explain" className="flex-1 flex flex-col m-0 px-4 pb-4 pt-3 min-h-0">
-                <LangToggle />
-                <Button onClick={handleExplain} disabled={explainLoading} className="mb-3" size="lg">
-                  {explainLoading ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> <span className={lang === "hi" ? "font-hindi" : ""}>{lang === "hi" ? `पृष्ठ ${currentPage} पढ़ रहा है…` : `Reading page ${currentPage}…`}</span></>
-                  ) : (
-                    <span className={lang === "hi" ? "font-hindi" : ""}>{lang === "hi" ? `पृष्ठ ${currentPage} समझाएँ` : `Explain Page ${currentPage}`}</span>
-                  )}
-                </Button>
-                <div className={`flex-1 overflow-y-auto bg-muted rounded-card p-4 text-sm whitespace-pre-wrap ${explanation && explanationLang === "hi" ? "font-hindi" : ""}`}>
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <BookOpen className="w-4 h-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground leading-tight">
+                        {lang === "hi" ? <span className="font-hindi">पृष्ठ {currentPage}</span> : <>Page {currentPage}</>}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground leading-tight">
+                        {lang === "hi" ? <span className="font-hindi">सरल व्याख्या</span> : "Simple explanation"}
+                      </p>
+                    </div>
+                  </div>
+                  <Button onClick={handleExplain} disabled={explainLoading} size="sm" className="rounded-full bg-gradient-primary">
+                    {explainLoading ? (
+                      <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> <span className={lang === "hi" ? "font-hindi" : ""}>{lang === "hi" ? "पढ़ रहा है…" : "Reading…"}</span></>
+                    ) : (
+                      <><Sparkles className="w-3.5 h-3.5 mr-1.5" /><span className={lang === "hi" ? "font-hindi" : ""}>{lang === "hi" ? "समझाएँ" : "Explain"}</span></>
+                    )}
+                  </Button>
+                </div>
+
+                <div className={`flex-1 overflow-y-auto bg-muted/50 border border-border/50 rounded-2xl p-4 text-sm ${explanation && explanationLang === "hi" ? "font-hindi" : ""}`}>
                   {explanation ? (
                     <>
-                      {explanation}
-                      {explainLoading && <span className="inline-block w-1.5 h-4 ml-0.5 align-middle bg-primary/70 animate-pulse" />}
+                      <Markdown text={explanation} hindi={explanationLang === "hi"} />
+                      {explainLoading && <span className="inline-block w-1.5 h-4 ml-0.5 align-middle bg-primary/70 animate-pulse rounded-sm" />}
                     </>
                   ) : explainLoading ? (
-                    <TypingDots />
+                    <div className="space-y-2">
+                      <div className="h-3 skeleton rounded w-3/4" />
+                      <div className="h-3 skeleton rounded w-full" />
+                      <div className="h-3 skeleton rounded w-5/6" />
+                      <div className="h-3 skeleton rounded w-2/3" />
+                    </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center text-center h-full py-8">
-                      <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
-                        <BookOpen className="w-5 h-5 text-primary" />
+                      <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                        <BookOpen className="w-6 h-6 text-primary" />
                       </div>
-                      <span className={`text-muted-foreground ${lang === "hi" ? "font-hindi" : ""}`}>
+                      <p className={`font-medium text-foreground mb-1 ${lang === "hi" ? "font-hindi" : ""}`}>
+                        {lang === "hi" ? "तैयार हैं?" : "Ready to learn?"}
+                      </p>
+                      <p className={`text-xs text-muted-foreground max-w-xs ${lang === "hi" ? "font-hindi" : ""}`}>
                         {lang === "hi"
-                          ? "वर्तमान पृष्ठ की सरल व्याख्या पाने के लिए ऊपर क्लिक करें।"
-                          : "Click above to get a simple explanation of the current page, read aloud automatically."}
-                      </span>
+                          ? "वर्तमान पृष्ठ की सरल व्याख्या पाने के लिए ऊपर “समझाएँ” दबाएँ।"
+                          : "Tap “Explain” above for a clear, friendly walkthrough of the current page — read aloud automatically."}
+                      </p>
                     </div>
                   )}
                 </div>
+
                 {explanation && !explainLoading && (
-                  <div className="flex gap-2 mt-3">
-                    {speakingState === "speaking" && <Button size="sm" variant="outline" onClick={pauseSpeech}><Pause className="w-4 h-4 mr-1" /> Pause</Button>}
-                    {speakingState === "paused" && <Button size="sm" variant="outline" onClick={resumeSpeech}><Play className="w-4 h-4 mr-1" /> Resume</Button>}
-                    {speakingState !== "idle" && <Button size="sm" variant="outline" onClick={stopSpeech}><Square className="w-4 h-4 mr-1" /> Stop</Button>}
-                    {speakingState === "idle" && <Button size="sm" variant="outline" onClick={() => speak(explanation, explanationLang)}><Volume2 className="w-4 h-4 mr-1" /> Read Again</Button>}
+                  <div className="flex gap-2 mt-3 flex-wrap">
+                    {speakingState === "speaking" && <Button size="sm" variant="outline" onClick={pauseSpeech} className="rounded-full"><Pause className="w-4 h-4 mr-1" /> Pause</Button>}
+                    {speakingState === "paused" && <Button size="sm" variant="outline" onClick={resumeSpeech} className="rounded-full"><Play className="w-4 h-4 mr-1" /> Resume</Button>}
+                    {speakingState !== "idle" && <Button size="sm" variant="outline" onClick={stopSpeech} className="rounded-full"><Square className="w-4 h-4 mr-1" /> Stop</Button>}
+                    {speakingState === "idle" && <Button size="sm" variant="outline" onClick={() => speak(explanation, explanationLang)} className="rounded-full"><Volume2 className="w-4 h-4 mr-1" /> Read Again</Button>}
+                    <Button size="sm" variant="outline" onClick={() => copyMsg(explanation, -1)} className="rounded-full">
+                      {copiedIdx === -1 ? <><Check className="w-4 h-4 mr-1 text-success" /> Copied</> : <><Copy className="w-4 h-4 mr-1" /> Copy</>}
+                    </Button>
                   </div>
                 )}
               </TabsContent>
