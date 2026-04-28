@@ -306,35 +306,63 @@ export default function AIAssistant({
     recog.maxAlternatives = 3;
     setInterim("");
 
+    let finalCaptured = "";
+    let lastInterim = "";
+    let submitted = false;
+
+    const submit = (text: string) => {
+      const t = text.trim();
+      if (!t || submitted) return;
+      submitted = true;
+      setInterim("");
+      setListening(false);
+      handleAsk(t);
+    };
+
     recog.onresult = (e: any) => {
-      let finalTxt = "";
       let interimTxt = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) finalTxt += r[0].transcript;
+        if (r.isFinal) finalCaptured += r[0].transcript;
         else interimTxt += r[0].transcript;
       }
+      lastInterim = interimTxt;
       if (interimTxt) setInterim(interimTxt);
-      if (finalTxt) {
-        setInterim("");
-        setListening(false);
+      if (finalCaptured && !submitted) {
         try { recog.stop(); } catch { /* noop */ }
-        handleAsk(finalTxt);
+        submit(finalCaptured);
       }
     };
     recog.onerror = (e: any) => {
-      setListening(false);
-      setInterim("");
       if (e.error === "no-speech") toast.info(lang === "hi" ? "कोई आवाज़ नहीं सुनाई दी" : "No speech detected");
       else if (e.error === "not-allowed") toast.error("Microphone permission denied");
+      else if (e.error === "aborted") { /* ignore */ }
+      else toast.error(`Mic error: ${e.error}`);
+      setListening(false);
+      setInterim("");
     };
-    recog.onend = () => { setListening(false); setInterim(""); };
-    recog.start();
-    recogRef.current = recog;
-    setListening(true);
+    recog.onend = () => {
+      // Fallback: if recognition ended without firing isFinal, use whatever we captured
+      if (!submitted) {
+        const text = (finalCaptured || lastInterim).trim();
+        if (text) submit(text);
+        else { setListening(false); setInterim(""); }
+      }
+    };
+    try {
+      recog.start();
+      recogRef.current = recog;
+      setListening(true);
+    } catch (err: any) {
+      toast.error("Could not start microphone");
+      setListening(false);
+    }
   };
 
-  const stopListening = () => { try { recogRef.current?.stop(); } catch { /* noop */ } setListening(false); };
+  const stopListening = () => {
+    try { recogRef.current?.stop(); } catch { /* noop */ }
+    // Don't clear listening here; onend will handle submission
+  };
 
   const handleExplain = async () => {
     setExplainLoading(true);
