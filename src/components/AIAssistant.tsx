@@ -481,6 +481,32 @@ export default function AIAssistant({
               </div>
             </div>
 
+            {speakingState !== "idle" && (
+              <div className="mx-3 sm:mx-4 mt-2 flex items-center gap-2 px-3 py-2 rounded-full bg-primary/10 border border-primary/20 animate-fade-in-fast shrink-0">
+                <span className="relative flex w-2 h-2 shrink-0">
+                  <span className={`absolute inset-0 rounded-full bg-primary ${speakingState === "speaking" ? "animate-ping" : ""}`} />
+                  <span className="relative w-2 h-2 rounded-full bg-primary" />
+                </span>
+                <span className={`text-xs font-medium text-foreground flex-1 truncate ${lang === "hi" ? "font-hindi" : ""}`}>
+                  {speakingState === "speaking"
+                    ? (lang === "hi" ? "बोल रहा हूँ…" : "Speaking…")
+                    : (lang === "hi" ? "रुका हुआ" : "Paused")}
+                </span>
+                {speakingState === "speaking" ? (
+                  <button onClick={pauseSpeech} className="w-7 h-7 rounded-full bg-card hover:bg-muted flex items-center justify-center active:scale-95 transition-all" aria-label="Pause">
+                    <Pause className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <button onClick={resumeSpeech} className="w-7 h-7 rounded-full bg-card hover:bg-muted flex items-center justify-center active:scale-95 transition-all" aria-label="Resume">
+                    <Play className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button onClick={stopSpeech} className="w-7 h-7 rounded-full bg-card hover:bg-muted flex items-center justify-center active:scale-95 transition-all" aria-label="Stop">
+                  <Square className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col min-h-0">
               <div className="px-3 sm:px-4 pt-3 shrink-0">
                 <TabsList className="grid grid-cols-3 w-full h-11 p-1 bg-muted rounded-full">
@@ -565,12 +591,38 @@ export default function AIAssistant({
                                 {copiedIdx === i ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
                                 {copiedIdx === i ? "Copied" : "Copy"}
                               </button>
-                              <button
-                                onClick={() => speak(m.content, m.lang)}
-                                className="text-[11px] text-muted-foreground hover:text-foreground active:scale-95 flex items-center gap-1 px-2 py-1 rounded-full hover:bg-muted transition-all"
-                              >
-                                <Volume2 className="w-3 h-3" /> {lang === "hi" ? <span className="font-hindi">सुनें</span> : "Speak"}
-                              </button>
+                              {speakingState !== "idle" && isLastAssistant ? (
+                                <>
+                                  {speakingState === "speaking" ? (
+                                    <button
+                                      onClick={pauseSpeech}
+                                      className="text-[11px] text-primary hover:text-primary/80 active:scale-95 flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 hover:bg-primary/20 transition-all"
+                                    >
+                                      <Pause className="w-3 h-3" /> {lang === "hi" ? <span className="font-hindi">रोकें</span> : "Pause"}
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={resumeSpeech}
+                                      className="text-[11px] text-primary hover:text-primary/80 active:scale-95 flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 hover:bg-primary/20 transition-all"
+                                    >
+                                      <Play className="w-3 h-3" /> {lang === "hi" ? <span className="font-hindi">जारी</span> : "Resume"}
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={stopSpeech}
+                                    className="text-[11px] text-muted-foreground hover:text-foreground active:scale-95 flex items-center gap-1 px-2 py-1 rounded-full hover:bg-muted transition-all"
+                                  >
+                                    <Square className="w-3 h-3" /> {lang === "hi" ? <span className="font-hindi">बंद</span> : "Stop"}
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => speak(m.content, m.lang)}
+                                  className="text-[11px] text-muted-foreground hover:text-foreground active:scale-95 flex items-center gap-1 px-2 py-1 rounded-full hover:bg-muted transition-all"
+                                >
+                                  <Volume2 className="w-3 h-3" /> {lang === "hi" ? <span className="font-hindi">सुनें</span> : "Speak"}
+                                </button>
+                              )}
                               {isLastAssistant && (
                                 <button
                                   onClick={regenerate}
