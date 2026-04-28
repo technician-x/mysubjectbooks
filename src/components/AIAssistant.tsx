@@ -481,6 +481,32 @@ export default function AIAssistant({
               </div>
             </div>
 
+            {speakingState !== "idle" && (
+              <div className="mx-3 sm:mx-4 mt-2 flex items-center gap-2 px-3 py-2 rounded-full bg-primary/10 border border-primary/20 animate-fade-in-fast shrink-0">
+                <span className="relative flex w-2 h-2 shrink-0">
+                  <span className={`absolute inset-0 rounded-full bg-primary ${speakingState === "speaking" ? "animate-ping" : ""}`} />
+                  <span className="relative w-2 h-2 rounded-full bg-primary" />
+                </span>
+                <span className={`text-xs font-medium text-foreground flex-1 truncate ${lang === "hi" ? "font-hindi" : ""}`}>
+                  {speakingState === "speaking"
+                    ? (lang === "hi" ? "बोल रहा हूँ…" : "Speaking…")
+                    : (lang === "hi" ? "रुका हुआ" : "Paused")}
+                </span>
+                {speakingState === "speaking" ? (
+                  <button onClick={pauseSpeech} className="w-7 h-7 rounded-full bg-card hover:bg-muted flex items-center justify-center active:scale-95 transition-all" aria-label="Pause">
+                    <Pause className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <button onClick={resumeSpeech} className="w-7 h-7 rounded-full bg-card hover:bg-muted flex items-center justify-center active:scale-95 transition-all" aria-label="Resume">
+                    <Play className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button onClick={stopSpeech} className="w-7 h-7 rounded-full bg-card hover:bg-muted flex items-center justify-center active:scale-95 transition-all" aria-label="Stop">
+                  <Square className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col min-h-0">
               <div className="px-3 sm:px-4 pt-3 shrink-0">
                 <TabsList className="grid grid-cols-3 w-full h-11 p-1 bg-muted rounded-full">
