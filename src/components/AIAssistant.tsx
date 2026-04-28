@@ -61,7 +61,7 @@ export default function AIAssistant({
 }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("ask");
-  const [lang, setLang] = useState<Lang>("en");
+  const [lang, setLang] = useState<Lang>("hi");
 
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -79,7 +79,7 @@ export default function AIAssistant({
   const speakQueueRef = useRef<SpeechSynthesisUtterance[]>([]);
 
   const [explanation, setExplanation] = useState("");
-  const [explanationLang, setExplanationLang] = useState<Lang>("en");
+  const [explanationLang, setExplanationLang] = useState<Lang>("hi");
   const [explainLoading, setExplainLoading] = useState(false);
 
   const [voicesReady, setVoicesReady] = useState(false);
