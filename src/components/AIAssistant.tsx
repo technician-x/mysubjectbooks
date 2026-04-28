@@ -565,12 +565,38 @@ export default function AIAssistant({
                                 {copiedIdx === i ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
                                 {copiedIdx === i ? "Copied" : "Copy"}
                               </button>
-                              <button
-                                onClick={() => speak(m.content, m.lang)}
-                                className="text-[11px] text-muted-foreground hover:text-foreground active:scale-95 flex items-center gap-1 px-2 py-1 rounded-full hover:bg-muted transition-all"
-                              >
-                                <Volume2 className="w-3 h-3" /> {lang === "hi" ? <span className="font-hindi">सुनें</span> : "Speak"}
-                              </button>
+                              {speakingState !== "idle" && isLastAssistant ? (
+                                <>
+                                  {speakingState === "speaking" ? (
+                                    <button
+                                      onClick={pauseSpeech}
+                                      className="text-[11px] text-primary hover:text-primary/80 active:scale-95 flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 hover:bg-primary/20 transition-all"
+                                    >
+                                      <Pause className="w-3 h-3" /> {lang === "hi" ? <span className="font-hindi">रोकें</span> : "Pause"}
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={resumeSpeech}
+                                      className="text-[11px] text-primary hover:text-primary/80 active:scale-95 flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 hover:bg-primary/20 transition-all"
+                                    >
+                                      <Play className="w-3 h-3" /> {lang === "hi" ? <span className="font-hindi">जारी</span> : "Resume"}
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={stopSpeech}
+                                    className="text-[11px] text-muted-foreground hover:text-foreground active:scale-95 flex items-center gap-1 px-2 py-1 rounded-full hover:bg-muted transition-all"
+                                  >
+                                    <Square className="w-3 h-3" /> {lang === "hi" ? <span className="font-hindi">बंद</span> : "Stop"}
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => speak(m.content, m.lang)}
+                                  className="text-[11px] text-muted-foreground hover:text-foreground active:scale-95 flex items-center gap-1 px-2 py-1 rounded-full hover:bg-muted transition-all"
+                                >
+                                  <Volume2 className="w-3 h-3" /> {lang === "hi" ? <span className="font-hindi">सुनें</span> : "Speak"}
+                                </button>
+                              )}
                               {isLastAssistant && (
                                 <button
                                   onClick={regenerate}
